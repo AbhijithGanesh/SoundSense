@@ -10,6 +10,7 @@
 #include <WebSocketsServer.h>
 #include <I2S.h>
 
+static int flag = 0;
 const char *SSID = "SentinelAG";
 const char *PASS = "";
 WebSocketsServer webSocket = WebSocketsServer(81);
@@ -21,11 +22,9 @@ void handleWebSocketEvent(uint8_t num, WStype_t type, uint8_t *payload, size_t l
   switch (type)
   {
   case WStype_BIN:
-    // Binary data received
     if (length == sizeof(buffer))
     {
       memcpy(buffer, payload, length);
-      // Process audio data if needed
     }
     break;
   case WStype_CONNECTED:
@@ -33,11 +32,9 @@ void handleWebSocketEvent(uint8_t num, WStype_t type, uint8_t *payload, size_t l
     Serial.printf("[%u] Connected\n", num);
     break;
   case WStype_DISCONNECTED:
-    // WebSocket disconnected
     Serial.printf("[%u] Disconnected\n", num);
     break;
   case WStype_ERROR:
-    // WebSocket error
     Serial.printf("[%u] Error\n", num);
     break;
   default:
@@ -76,6 +73,12 @@ void setup()
 
 void loop()
 {
+
+  if (flag == 0){
+    Serial.println(WiFi.localIP());
+    flag = 1;
+  }
+
   webSocket.loop();
 
   for (int i = 0; i < 100; i++)
@@ -83,8 +86,7 @@ void loop()
     i2s_read_sample(&buffer[i][0], &buffer[i][1], true);
   }
 
-  // Send audio data over WebSocket to all connected clients
   sendBinaryToAllClients((uint8_t *)buffer, sizeof(buffer));
 
-  delay(10); // Adjust the delay as needed
+  delay(10);
 }
