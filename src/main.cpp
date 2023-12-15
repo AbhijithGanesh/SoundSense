@@ -11,7 +11,7 @@
 #include <I2S.h>
 
 const char *SSID = "SentinelAG";
-const char *PASS = "SentinelChaz@14";
+const char *PASS = "";
 WebSocketsServer webSocket = WebSocketsServer(81);
 
 int16_t buffer[100][2];
