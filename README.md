@@ -15,7 +15,7 @@ SoundSense is an Arduino and ESP8266-based project that leverages MEMS microphon
 ### Prerequisites
 
 - Arduino IDE
-- PlatformIO (optional but recommended)
+- PlatformIO 
 - ESP8266 Board Support
 
 ### Installation
@@ -29,6 +29,9 @@ SoundSense is an Arduino and ESP8266-based project that leverages MEMS microphon
 2. Open the project in Arduino IDE or PlatformIO.
 3. Upload the code to your Arduino and ESP8266 board.
 4. Connect MEMS microphones and set up your audio processing environment.
+5. Install Visual Studio Code and Platform IO extension
+6. The project will automatically be initiated
+
 
 ### Usage
 
