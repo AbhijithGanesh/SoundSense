@@ -1,95 +1,70 @@
-#include <Arduino.h>
-#include <ESP8266WiFi.h>
-#include <WiFiUdp.h>
-#include <i2s.h>
-#include <WebSocketsServer.h>
+#include <driver/i2s.h>
 
-#ifndef STASSID
-#define STASSID "SentinelAG"
-#define STAPSK  ""
-#endif
+#define I2S_WS 15
+#define I2S_SD 13
+#define I2S_SCK 2
+#define I2S_PORT I2S_NUM_0
+#define BUFFER_LEN 64
+#define bufferLen 64
 
-const char *SSID = STASSID;
-const char *PASS = STAPSK;
 
-WiFiUDP udp;
-WebSocketsServer webSocket = WebSocketsServer(81);  // Create a WebSocket server on port 81
-const IPAddress listener = { 192, 168, 1, 40 };
-
-const int port = 16500;
-
-int16_t buffer[100][2]; // Determine the Sampling time
-
-void onWebSocketEvent(uint8_t num, WStype_t type, uint8_t *payload, size_t length) {
-  switch(type) {
-    case WSop_close:
-      Serial.printf("[%u] WebSocket Closed\n", num);
-    case WStype_CONNECTED:
-      Serial.printf("[%u] WebSocket Connected\n", num);
-      break;
-    case WStype_DISCONNECTED:
-      Serial.printf("[%u] WebSocket Disconnected\n", num);
-      break;
-    default:
-      break;
-  }
-}
+int16_t sBuffer[BUFFER_LEN];
 
 void setup() {
-  
-  Serial.begin(9600);
+  Serial.begin(115200);
+  Serial.println("Setup I2S ...");
 
-  // Connect to WiFi network
-  WiFi.begin(SSID, PASS);
-
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
-    Serial.print(".");
-  }
-
-  Serial.println("");
-  Serial.println("WiFi connected");
-  Serial.print("My IP: ");
-  Serial.println(WiFi.localIP());
-  
-  i2s_rxtx_begin(true, false); // Enable I2S RX
-  i2s_set_rate(16000);
-
-  Serial.print("\nStart the listener on ");
-  Serial.print(listener);
-  Serial.print(":");
-  Serial.println(port);
-  Serial.println("Under Linux for listener: netcat -u -p 16500 -l | play -t raw -r 16000 -b 16 -c 2 -e signed-integer -");
-  Serial.println("Under Linux for recorder: netcat -u -p 16500 -l | rec -t raw -r 16000 -b 16 -c 2 -e signed-integer - file.mp3");
-  udp.beginPacket(listener, port);
-  udp.write("I2S Receiver\r\n");
-  udp.endPacket();
-
-  webSocket.begin();
-  Serial.println("WebSocketsServer started.");
-  webSocket.onEvent(onWebSocketEvent);
+  delay(1000);
+  i2s_install();
+  i2s_setpin();
+  i2s_start(I2S_PORT);
+  delay(500);
 }
 
 void loop() {
-  webSocket.loop();  // Handle WebSocket events
+  size_t bytesIn = 0;
+  esp_err_t result = i2s_read(I2S_PORT, &sBuffer, BUFFER_LEN * sizeof(int16_t), &bytesIn, portMAX_DELAY);
 
-  static int cnt = 0;
+  if (result == ESP_OK) {
+    int samples_read = bytesIn / sizeof(int16_t);
 
-  // Each loop will send 100 raw samples (400 bytes)
-  // UDP needs to be < TCP_MSS which can be 500 bytes in LWIP V2
-  for (int i = 0; i < 100; i++) {
-    i2s_read_sample(&buffer[i][0], &buffer[i][1], true);
-    Serial.println(i2s_read_sample(&buffer[i][0], &buffer[i][1], true));
+    if (samples_read > 0) {
+      float mean = 0;
+
+      for (int i = 0; i < samples_read; ++i) {
+        mean += sBuffer[i];
+      }
+
+      mean /= samples_read;
+
+      Serial.println(mean);
+    }
   }
+}
 
-  udp.beginPacket(listener, port);
-  udp.write((uint8_t*)buffer, sizeof(buffer));
-  udp.endPacket();
+void i2s_install(){
+  const i2s_config_t i2s_config = {
+    .mode = i2s_mode_t(I2S_MODE_MASTER | I2S_MODE_RX),
+    .sample_rate = 44100,
+    .bits_per_sample = i2s_bits_per_sample_t(16),
+    .channel_format = I2S_CHANNEL_FMT_ONLY_LEFT,
+    .communication_format = i2s_comm_format_t(I2S_COMM_FORMAT_STAND_I2S),
+    .intr_alloc_flags = 0, // default interrupt priority
+    .dma_buf_count = 8,
+    .dma_buf_len = bufferLen,
+    .use_apll = false
+  };
 
-  webSocket.broadcastTXT((char*)buffer, sizeof(buffer));  // Broadcast the data to all connected clients
+  i2s_driver_install(I2S_PORT, &i2s_config, 0, NULL);
+}
 
-  cnt++;
-  if ((cnt % 100) == 0) {
-    Serial.printf("%d\n", cnt);
-  }
+void i2s_setpin(){
+  const i2s_pin_config_t pin_config = {
+    .bck_io_num = I2S_SCK,
+    .ws_io_num = I2S_WS,
+    .data_out_num = -1,
+    .data_in_num = I2S_SD
+  };
+
+  i2s_set_pin(I2S_PORT, &pin_config);
 }
